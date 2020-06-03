@@ -3,12 +3,8 @@
 main().
 
 function main{
-  set allParts to ship:parts.
-  set allEngines to list().
-  set allTanks to list().
-  set allUllage to list().
-  declare global currentEngineNumber to 1.
-  findTaggedParts(allParts,allEngines,allTanks,allUllage).
+  PreScript().
+  findTaggedParts().
   engineCheck(allEngines).
   doTitle().
   doCountdown().
@@ -18,6 +14,10 @@ function main{
 //  executeManeuver(maneuverTime, nodeX, nodeY, nodeZ).
   print("It Works!!!!!").
 wait until Ag1.                        //hold program open
+}
+
+function PreScript{
+  declare global currentEngineNumber to 1.
 }
 
 
@@ -45,9 +45,9 @@ function doTitle{
   print(" ").
   print("All ullage motors should be tagged 'ullage motor'").
   print(" ").
-  print("Ullage stages are in the format 'Separation' -> 'Ullage motor' -> 'Ignite next engine'").
+  print("Ullage stages are in the format 'Separation' -> 'Ullage motor' -> 'Ignite next engine' -> 'seperate ullage motors'").
   print(" ").
-  print("Hot stages ar in the order 'Ignite engine' -> 'Separation'").
+  print("Hot stages are in the order 'Ignite engine' -> 'Separation'").
   print(" ").
   print("Only one action per stage!").
   on Ag9{                                    // press 9 to shutdown
@@ -61,9 +61,9 @@ function doTitle{
 }
 
 function doCountdown{ 
-   local count is 10.
-   print ("Countdown: ") at (0,0).
-   until count = 0 {
+  local count is 10.
+  print ("Countdown: ") at (0,0).
+  until count = 0 {
     if count = 3{
       stage.//Ignite main engines
       print("Ignition!") at (0,1).
@@ -71,7 +71,7 @@ function doCountdown{
     print ("T-" + count +" ") at (10,0).
     set count to (count-1).
     wait 1.
-   }
+  }
 
 }
 
@@ -118,7 +118,7 @@ function showUI{
 
 
 //-----------------Fuel Monitoring system------------------------------------
- 
+
 
 function getResources{
   list resources in reslist.
@@ -137,7 +137,10 @@ function showResources{
 }
 
 function findTaggedParts{
-  parameter allParts,allEngines,allTanks,allUllage.
+  global allParts is ship:parts.
+  global allEngines is list().
+  global allTanks is list().
+  global allUllage is list().
   for part in allParts{
     if part:tag:contains("Engine"){
       allEngines:add(part).
@@ -149,6 +152,9 @@ function findTaggedParts{
       allUllage:add(part).
     }
   }
+  return allTanks.
+  return allEngines.
+  return allUllage.
 }
 
 
@@ -157,7 +163,7 @@ function findTaggedParts{
 function checkForUllageMotor{
   parameter allUllage.
   for part in allUllage{
-    if part:tag = "ullage motor" and part:stage = stage:number-2{
+    if part:tag = "ullage" and part:stage = stage:number-2{
       set ullageMotorsNextStage to true.
       return ullageMotorsNextStage.
     }
@@ -183,9 +189,9 @@ function fuelCheck{
 function engineCheck{
   parameter allEngines.
   for part in allEngines{
-    if part:tag:contains("Enigne ":insert(7,currentEngineNumber:tostring)){
+    if part:tag:contains("Engine ":insert(7,currentEngineNumber:tostring)){
       print part at (0,25).
-      set currentEngine to part.
+      global currentEngine is part.
     }
   }
   return currentEngine.
@@ -213,11 +219,14 @@ function doHotStage{
 //  when timeToBurnout <= 0.2 then{ should make staged engine cutoff trigger
     wait 2.5.
     stage. //Separation
-    findPartsInNextStage().
-    checkForUllageMotor().
+    findTaggedParts().
+    checkForUllageMotor(allUllage).
     set currentTank to currentTank + 1.
     set currentEngineNumber to currentEngineNumber + 1.
-    engineCheck().
+    engineCheck(allEngines).
+    wait 2.
+    return currentTank.
+    return currentEngineNumber.
 //  }
 }
 
@@ -232,21 +241,23 @@ function doUllageStage{
     Stage.                                    //Fire ullage motors
     wait until stage:ready.// and nextStageFuelSettled = true.
     Stage.                                    //Fire liquid fuel stage
-    findPartsInNextStage().
-    checkForUllageMotor().
+    wait 1.5.  //wait for ullage burnout
+    stage.
+    findTaggedParts().
+    checkForUllageMotor(allUllage).
     set currentTank to currentTank + 1.
     set currentEngineNumber to currentEngineNumber + 1.
-    engineCheck().
+    engineCheck(allEngines).
+    wait 2.
+    return currentTank.
+    return currentEngineNumber.
   }
 }
 
 function newSmartStage{
   set ullageMotorsNextStage to checkForUllageMotor(allUllage).
-  // if not(defined currentEngineNumber) {
-  //   declare global currentEngineNumber to 1.
-  // }
   findTimeToBurnout().
-  engineCheck().
+  engineCheck(allEngines).
   print currentEngine at (0,26).
   if ullageMotorsNextStage = false{
     print "hotstage" at (0,38).
