@@ -12,7 +12,7 @@ function main{
   ascentLoop().
 //  doCircularize().
 //  executeManeuver(maneuverTime, nodeX, nodeY, nodeZ).
-  print("It Works!!!!!").
+  print("It Worked!!!!!").
 wait until Ag1.                        //hold program open
 }
 
@@ -85,10 +85,9 @@ function doAscent{
   lock targetPitch to   3.47972E-9 * alt:radar^2 - 0.00110814 * alt:radar + 89.8439.
   set targetDirection to 90.
   lock steering to heading(targetDirection, targetPitch).
-  when apoapsis>160000 then{
+  when apoapsis>300000 then{
     set ascentDone to true.
   }
-  return ascentDone.
 }
 
 function doCircularization{
@@ -105,7 +104,7 @@ function doShutDown{
 }
 
 function showUI{
-  getResources().
+  list resources in reslist.
   print ("Current stage :  " + stage:number) at (0,8).
   print ("Resource:                Current:     %:") at (0,12).
   print ("----------------------------------------") at (0,13).
@@ -119,11 +118,6 @@ function showUI{
 
 //-----------------Fuel Monitoring system------------------------------------
 
-
-function getResources{
-  list resources in reslist.
-  return reslist.
-}
 
 function showResources{
   parameter reslist, currentFuelInStage.
@@ -152,9 +146,6 @@ function findTaggedParts{
       allUllage:add(part).
     }
   }
-  return allTanks.
-  return allEngines.
-  return allUllage.
 }
 
 
@@ -165,9 +156,12 @@ function checkForUllageMotor{
   for part in allUllage{
     if part:tag = "ullage" and part:stage = stage:number-2{
       set ullageMotorsNextStage to true.
-      return ullageMotorsNextStage.
+    }
+    else{
+      set ullageMotorsNextStage to false.
     }
   }
+  return ullageMotorsNextStage.
 }
 
 
@@ -190,7 +184,6 @@ function engineCheck{
   parameter allEngines.
   for part in allEngines{
     if part:tag:contains("Engine ":insert(7,currentEngineNumber:tostring)){
-      print part at (0,25).
       global currentEngine is part.
     }
   }
@@ -219,19 +212,19 @@ function doHotStage{
 //  when timeToBurnout <= 0.2 then{ should make staged engine cutoff trigger
     wait 2.5.
     stage. //Separation
-    findTaggedParts().
-    checkForUllageMotor(allUllage).
     set currentTank to currentTank + 1.
     set currentEngineNumber to currentEngineNumber + 1.
+    findTaggedParts().
+    checkForUllageMotor(allUllage).
+    print checkForUllageMotor(allUllage) at (0,25).
+    print engineCheck(allEngines) at (0,27).
     engineCheck(allEngines).
     wait 2.
-    return currentTank.
-    return currentEngineNumber.
 //  }
 }
 
 function doUllageStage{
-  parameter timeToBurnout,currentEngine.
+  parameter timeToBurnout.
   print("ullage staging!") at (0,7).
     when currentEngine:flameout = true then{
 //    when timeToBurnout<0.1 then{
@@ -239,40 +232,40 @@ function doUllageStage{
     Stage.                                    //Separates previous stage
     wait until stage:ready.
     Stage.                                    //Fire ullage motors
-    wait until stage:ready.// and nextStageFuelSettled = true.
+    wait until stage:ready.                   // and nextStageFuelSettled = true.
     Stage.                                    //Fire liquid fuel stage
-    wait 1.5.  //wait for ullage burnout
+    wait 3.                                   //wait for ullage burnout
     stage.
-    findTaggedParts().
-    checkForUllageMotor(allUllage).
     set currentTank to currentTank + 1.
     set currentEngineNumber to currentEngineNumber + 1.
-    engineCheck(allEngines).
+    findTaggedParts().
+    checkForUllageMotor(allUllage).
+    print checkForUllageMotor(allUllage) at (0,25).
+    print engineCheck(allEngines) at (0,27).
     wait 2.
-    return currentTank.
-    return currentEngineNumber.
   }
 }
 
 function newSmartStage{
   set ullageMotorsNextStage to checkForUllageMotor(allUllage).
-  findTimeToBurnout().
   engineCheck(allEngines).
-  print currentEngine at (0,26).
+  fuelCheck(allTanks).
+  print ("current engine:  " + currentEngineNumber) at (0,28).
+  print ("current tank:  " + currentTank) at (0,26).
+  findTimeToBurnout().
   if ullageMotorsNextStage = false{
     print "hotstage" at (0,38).
   }
   else{
     print "ullage stage" at (0,38).
   }
-  print ("current engine:  " + currentEngineNumber) at (0,28).
-  when timeToBurnout <= 3.2 then{
+  if timeToBurnout <= 3.2{
     if ullageMotorsNextStage = false{
       doHotStage(timeToBurnout).
       }
 
     if ullageMotorsNextStage = true{
-      doUllageStage(timeToBurnout,currentEngine).
+      doUllageStage(timeToBurnout).
     }
   }
 }
