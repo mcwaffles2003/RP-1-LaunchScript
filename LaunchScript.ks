@@ -17,15 +17,19 @@ wait until Ag1.                        //hold program open
 }
 
 function PreScript{
-  declare global currentEngineNumber to 1.
+  global currentEngineNumber is 1.
+  global currentTankNumber is 1.
 }
 
 
 function ascentLoop{
+  print ("Current stage :  " + stage:number) at (0,8).
+  print ("Resource:                Current:     %:") at (0,12).
+  print ("----------------------------------------") at (0,13).
   doAscent().
   until ascentDone{
-    newSmartStage().
     showUI().
+    newSmartStage().  
   }
   doShutDown().
 }
@@ -41,15 +45,15 @@ function doTitle{
   print(" ").
   print("Engines should be tagged 'Engine #' where # is the order of engines fired from 1 and up").
   print(" ").
-  print("Tanks should be labeled 'Tanks #' where number should match the corresponding engine").
+  print("Tanks should be labeled 'Tanks #' where # should match the corresponding engine").
   print(" ").
   print("All ullage motors should be tagged 'ullage motor'").
   print(" ").
-  print("Ullage stages are in the format 'Separation' -> 'Ullage motor' -> 'Ignite next engine' -> 'seperate ullage motors'").
+  print("Ullage stages are in the format:").
+  print("Separation->Ullage motor->Ignite next engine->seperate ullage motors").
   print(" ").
-  print("Hot stages are in the order 'Ignite engine' -> 'Separation'").
-  print(" ").
-  print("Only one action per stage!").
+  print("Hot stages are in the order:").
+  print("Ignite engine->Separation").
   on Ag9{                                    // press 9 to shutdown
     shutdown.
   }
@@ -88,6 +92,7 @@ function doAscent{
   when apoapsis>300000 then{
     set ascentDone to true.
   }
+  fuelCheck(allTanks).
 }
 
 function doCircularization{
@@ -105,10 +110,10 @@ function doShutDown{
 
 function showUI{
   list resources in reslist.
-  print ("Current stage :  " + stage:number) at (0,8).
-  print ("Resource:                Current:     %:") at (0,12).
-  print ("----------------------------------------") at (0,13).
-  showResources(reslist,currentFuelInStage).
+  // print ("Current stage :  " + stage:number) at (0,8).
+  // print ("Resource:                Current:     %:") at (0,12).
+  // print ("----------------------------------------") at (0,13).
+  showResources().
 }
 
 
@@ -120,32 +125,20 @@ function showUI{
 
 
 function showResources{
-  parameter reslist, currentFuelInStage.
-  local count is 0.
+  local count is 14.
   for res in reslist {
-      print (res:name) at (0,14+count).
-      print (round(res:amount,2)) at (25,14+count).
-      print (round(100*res:amount/res:capacity)) at (38,14+count).
+    LOCAL printString IS res:name:PADRIGHT(25).
+    SET printString TO (printString + (round(res:amount,2))):PADRIGHT(38).
+    SET printString TO printString + (round(100*res:amount/res:capacity)).
+    PRINT printString at (0,count).
     set count to count + 1.
   }
 }
 
 function findTaggedParts{
-  global allParts is ship:parts.
-  global allEngines is list().
-  global allTanks is list().
-  global allUllage is list().
-  for part in allParts{
-    if part:tag:contains("Engine"){
-      allEngines:add(part).
-    }
-    if part:tag:contains("Tank"){
-      allTanks:add(part).
-    }
-    if part:tag:contains("ullage"){
-      allUllage:add(part).
-    }
-  }
+  global allEngines is ship:PARTSTAGGEDPATTERN("Engine").
+  global allTanks is ship:PARTSTAGGEDPATTERN("Tank").
+  global allUllage is ship:PARTSTAGGEDPATTERN("Ullage").
 }
 
 
@@ -153,8 +146,9 @@ function findTaggedParts{
 
 function checkForUllageMotor{
   parameter allUllage.
+  set ullageMotorsNextStage to false.
   for part in allUllage{
-    if part:tag = "ullage" and part:stage = stage:number-2{
+    if part:stage = stage:number-2{
       set ullageMotorsNextStage to true.
     }
     else{
@@ -168,11 +162,8 @@ function checkForUllageMotor{
 
 function fuelCheck{
   parameter allTanks.
-  if not(defined currentTank) {
-    declare global currentTank to 1.
-  }
   for part in allTanks{
-    if part:tag:contains("Tank ":insert(5,currentTank:tostring)){
+    if part:tag:contains("Tank ":insert(5,currentTankNumber:tostring)){
       set currentFuelInStage to part:resources[0]:amount.
     }
   }
@@ -192,11 +183,11 @@ function engineCheck{
 
 function findTimeToBurnout{
   wait 0.
-  local initialTime is TIME:SECONDS.                   //1st time check
   local initialFuel is fuelCheck(allTanks).            //1st check fuel
+  local initialTime is TIME:SECONDS.                   //1st time check
   wait 0.1.
-  local finalTime is TIME:SECONDS.                     //2nd time check
   local finalFuel is fuelCheck(allTanks).              //2nd check fuel
+  local finalTime is TIME:SECONDS.                     //2nd time check
   local deltaTime is finalTime - initialTime.            //find change in time
   local deltaFuel is initialFuel - finalFuel.            //find change in fuel
   set timeToBurnout to finalFuel*deltaTime/deltaFuel.
@@ -208,42 +199,40 @@ function doHotStage{
   parameter timeToBurnout.
   print("hot staging!") at (0,7).
     stage. //Starts Engine
-//  }
-//  when timeToBurnout <= 0.2 then{ should make staged engine cutoff trigger
-    wait 2.5.
+    until currentEngine:flameout = true.
     stage. //Separation
-    set currentTank to currentTank + 1.
-    set currentEngineNumber to currentEngineNumber + 1.
-    findTaggedParts().
-    checkForUllageMotor(allUllage).
-    print checkForUllageMotor(allUllage) at (0,25).
-    print engineCheck(allEngines) at (0,27).
-    engineCheck(allEngines).
-    wait 2.
-//  }
+    postStageCheck().
 }
 
 function doUllageStage{
   parameter timeToBurnout.
   print("ullage staging!") at (0,7).
-    when currentEngine:flameout = true then{
-//    when timeToBurnout<0.1 then{
-    wait until stage:ready.
-    Stage.                                    //Separates previous stage
-    wait until stage:ready.
-    Stage.                                    //Fire ullage motors
-    wait until stage:ready.                   // and nextStageFuelSettled = true.
-    Stage.                                    //Fire liquid fuel stage
-    wait 3.                                   //wait for ullage burnout
-    stage.
-    set currentTank to currentTank + 1.
-    set currentEngineNumber to currentEngineNumber + 1.
-    findTaggedParts().
-    checkForUllageMotor(allUllage).
-    print checkForUllageMotor(allUllage) at (0,25).
-    print engineCheck(allEngines) at (0,27).
-    wait 2.
-  }
+  until currentEngine:flameout = true.
+  wait until stage:ready.
+  Stage.                                    //Separates previous stage
+  wait until stage:ready.
+  Stage.                                    //Fire ullage motors
+  wait until stage:ready.                   // and nextStageFuelSettled = true.
+  Stage.                                    //Fire liquid fuel stage
+  wait 3.                                   //wait for ullage burnout
+  stage.
+  postStageCheck().
+}
+
+function postStageCheck{
+  clearscreen.
+  set currentTankNumber to currentTankNumber + 1.
+  set currentEngineNumber to currentEngineNumber + 1.
+  findTaggedParts().
+  checkForUllageMotor(allUllage).
+  print checkForUllageMotor(allUllage) at (0,25).
+  print engineCheck(allEngines) at (0,27).
+  print ("current engine:  " + currentEngineNumber) at (0,28).
+  print ("current tank:  " + currentTankNumber) at (0,26).
+  print ("Current stage :  " + stage:number) at (0,8).
+  print ("Resource:                Current:     %:") at (0,12).
+  print ("----------------------------------------") at (0,13).
+  wait 2.
 }
 
 function newSmartStage{
@@ -251,7 +240,7 @@ function newSmartStage{
   engineCheck(allEngines).
   fuelCheck(allTanks).
   print ("current engine:  " + currentEngineNumber) at (0,28).
-  print ("current tank:  " + currentTank) at (0,26).
+  print ("current tank:  " + currentTankNumber) at (0,26).
   findTimeToBurnout().
   if ullageMotorsNextStage = false{
     print "hotstage" at (0,38).
